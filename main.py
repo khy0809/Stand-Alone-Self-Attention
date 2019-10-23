@@ -11,6 +11,10 @@ from config import get_args, get_logger
 from model import ResNet50, ResNet38, ResNet26
 from preprocess import load_data
 
+from torch.utils.tensorboard import SummaryWriter
+import datetime
+
+
 
 def adjust_learning_rate(optimizer, epoch, args):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
@@ -20,7 +24,6 @@ def adjust_learning_rate(optimizer, epoch, args):
 
 
 def train(model, train_loader, optimizer, criterion, epoch, args, logger):
-    model.train()
     model.train()
 
     train_acc = 0.0
@@ -47,6 +50,8 @@ def train(model, train_loader, optimizer, criterion, epoch, args, logger):
             for param_group in optimizer.param_groups:
                 # print(",  Current learning rate is: {}".format(param_group['lr']))
                 logger.info("Current learning rate is: {}".format(param_group['lr']))
+    return train_acc / len(train_loader) * len(data)
+
 
 
 def eval(model, test_loader, args):
@@ -77,6 +82,7 @@ def get_model_parameters(model):
 
 
 def main(args, logger):
+
     train_loader, test_loader = load_data(args)
     if args.dataset == 'CIFAR10':
         num_classes = 10
@@ -117,23 +123,37 @@ def main(args, logger):
             model = nn.DataParallel(model)
         model = model.cuda()
 
+    if args.debug:
+        filename = 'debug'
+    else:
+        filename = 'model_' + str(args.dataset) + '_' + str(args.model_name) + '_' + str(args.stem) + '_ckpt.tar'
+    print('filename :: ', filename)
+
     print("Number of model parameters: ", get_model_parameters(model))
     logger.info("Number of model parameters: {0}".format(get_model_parameters(model)))
+
+    if not os.path.exists('./logs'):
+        os.makedirs('./logs')
+
+    writer = SummaryWriter(log_dir='./logs/{}-{}'.format(filename, datetime.datetime.now().strftime('%Y%m%d_%H%M%S')))
+
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
     for epoch in range(start_epoch, args.epochs + 1):
-        train(model, train_loader, optimizer, criterion, epoch, args, logger)
+        train_acc = train(model, train_loader, optimizer, criterion, epoch, args, logger)
+        writer.add_scalar('train/acc', train_acc, global_step=epoch)
+
         eval_acc = eval(model, test_loader, args)
+
+        writer.add_scalar('test/acc', eval_acc, global_step=epoch)
 
         is_best = eval_acc > best_acc
         best_acc = max(eval_acc, best_acc)
 
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        filename = 'model_' + str(args.dataset) + '_' + str(args.model_name) + '_' + str(args.stem) + '_ckpt.tar'
-        print('filename :: ', filename)
 
         parameters = get_model_parameters(model)
 

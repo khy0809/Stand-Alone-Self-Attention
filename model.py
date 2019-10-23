@@ -8,7 +8,7 @@ from attention import AttentionConv, AttentionStem
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, in_channels, out_channels, stride=1, groups=1, base_width=64):
+    def __init__(self, in_channels, out_channels, stride=1, attention_k=7, groups=1, base_width=64):
         super(Bottleneck, self).__init__()
         self.stride = stride
         width = int(out_channels * (base_width / 64.)) * groups
@@ -19,7 +19,7 @@ class Bottleneck(nn.Module):
             nn.ReLU(),
         )
         self.conv2 = nn.Sequential(
-            AttentionConv(width, width, kernel_size=7, padding=3, groups=8),
+            AttentionConv(width, width, kernel_size=attention_k, padding=3, groups=8),
             nn.BatchNorm2d(width),
             nn.ReLU(),
         )
@@ -49,9 +49,10 @@ class Bottleneck(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=1000, stem=False):
+    def __init__(self, block, num_blocks, num_classes=1000, stem=False, attention_k=7):
         super(Model, self).__init__()
         self.in_places = 64
+        self.attention_k = attention_k
 
         if stem:
             self.init = nn.Sequential(
@@ -90,7 +91,7 @@ class Model(nn.Module):
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
         for stride in strides:
-            layers.append(block(self.in_places, planes, stride))
+            layers.append(block(self.in_places, planes, stride, self.attention_k))
             self.in_places = planes * block.expansion
         return nn.Sequential(*layers)
 
