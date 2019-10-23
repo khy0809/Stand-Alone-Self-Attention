@@ -21,6 +21,7 @@ def adjust_learning_rate(optimizer, epoch, args):
 
 def train(model, train_loader, optimizer, criterion, epoch, args, logger):
     model.train()
+    model.train()
 
     train_acc = 0.0
     step = 0
